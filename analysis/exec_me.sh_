@@ -1,0 +1,8 @@
+Nmax=10
+cfile="configs/hsofs_post_config.yml"
+Sleep=300
+while [ 1 ] ; do 
+        sh ./bin/run_storms.sh --maxrun $Nmax --configfile $cfile
+        sleep $Sleep
+done
+
