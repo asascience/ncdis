@@ -45,22 +45,34 @@ def FilterData(dmax, r):
 
 # Load data
 data = pd.read_csv('1612340_19800101_20221231.csv')
+data = data.dropna()
+data['datetime'] = pd.to_datetime(data['datetime']) # convert to datetime type
+data.index = pd.DatetimeIndex(data.datetime) # enable time indexing
+
 st = data['datetime'].iloc[0] # start year
 #name = meta[1][0][11:]  # (JJ) we don't have name
-t = data['datetime']
 SL = data['hourly_height_STND_meters']
 
+# convert datetimes to type usuable for linear regression
+t = data['datetime']
+# convert to date delta (https://stackoverflow.com/questions/24588437/convert-date-to-float-for-linear-regression-on-pandas-data-frame)
+dd = (t - t.min())  / np.timedelta64(1,'D')
+
 # Detrend data
-tt= np.array([t, np.ones((len(t),1))]) # matrix for regression
+tt = np.column_stack((dd, np.ones(len(dd))))
 b = np.linalg.lstsq(tt, SL, rcond=None)[0]
 slope = b[0] * 365.25 # m/yr
 yh = tt * b
 
 # center around 2000
-idx = np.where(t == datetime(2000, 7, 1).toordinal())[0][0] # find midpoint of the year 2000 (July 1, 2000)
+idx = data['datetime'].searchsorted(datetime(2000, 7, 1)) # find midpoint of the year 2000 (July 1, 2000)
 yh = yh - yh[idx] # center around midpoint
 h = SL - yh # detrend timeseries
 
+# pythonic version:
+data.resample('D').max()
+
+# so maybe we don't need this
 dailyMax = DailyMax(t, h)
 
 # calculate MHHW over a 19-yr period and put daily max on MHHW datum
