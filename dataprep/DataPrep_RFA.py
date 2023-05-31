@@ -45,35 +45,34 @@ def FilterData(dmax, r):
 
 # Load data
 data = pd.read_csv('1612340_19800101_20221231.csv')
-data = data.dropna()
 data['datetime'] = pd.to_datetime(data['datetime']) # convert to datetime type
 data.index = pd.DatetimeIndex(data.datetime) # enable time indexing
+data = data.drop(columns=['datetime']).dropna() # remove old column and empty rows
 
-st = data['datetime'].iloc[0] # start year
+st = data.index.min() # start year
 #name = meta[1][0][11:]  # (JJ) we don't have name
 SL = data['hourly_height_STND_meters']
 
 # convert datetimes to type usuable for linear regression
-t = data['datetime']
+#t = data['datetime']
 # convert to date delta (https://stackoverflow.com/questions/24588437/convert-date-to-float-for-linear-regression-on-pandas-data-frame)
-dd = (t - t.min())  / np.timedelta64(1,'D')
+#dd = (t - t.min())  / np.timedelta64(1,'D')
 
 # Detrend data
-tt = np.column_stack((dd, np.ones(len(dd))))
-b = np.linalg.lstsq(tt, SL, rcond=None)[0]
-slope = b[0] * 365.25 # m/yr
-yh = tt * b
+#tt = np.column_stack((dd, np.ones(len(dd))))
+#b = np.linalg.lstsq(tt, SL, rcond=None)[0]
+#slope = b[0] * 365.25 # m/yr
+#yh = tt * b
 
 # center around 2000
-idx = data['datetime'].searchsorted(datetime(2000, 7, 1)) # find midpoint of the year 2000 (July 1, 2000)
-yh = yh - yh[idx] # center around midpoint
-h = SL - yh # detrend timeseries
+#idx = data['datetime'].searchsorted(datetime(2000, 7, 1)) # find midpoint of the year 2000 (July 1, 2000)
+#yh = yh - yh[idx] # center around midpoint
+#h = SL - yh # detrend timeseries
 
 # pythonic version:
-data.resample('D').max()
-
-# so maybe we don't need this
-dailyMax = DailyMax(t, h)
+dailyMax = data.resample('D').max()
+# so maybe we don't need this:
+# dailyMax = DailyMax(t, h)
 
 # calculate MHHW over a 19-yr period and put daily max on MHHW datum
 # Let's discuss this step. Likely will use the 1991-2009 period to estimate
@@ -82,18 +81,25 @@ dailyMax = DailyMax(t, h)
 # filter daily max
 r = 2 # 4-day filter: 2 days on each side.
 
-daily_filtered = FilterData(dailyMax, r)
-yrs = np.unique(np.array([datetime.fromordinal(int(d)).year for d in daily_filtered[:,0]])) # years of data
+# (JMJ) Not sure what this does. We don't need to filter in Python bc it already removes rows in the calc
+#daily_filtered = FilterData(dailyMax, r)
+
+#yrs = np.unique(np.array([datetime.fromordinal(int(d)).year for d in daily_filtered[:,0]])) # years of data
+yrs = data.resample('Y').max()
 
 # calculate 98th percentile threshold
-u = np.percentile(daily_filtered[:,1], 98)
+#u = np.percentile(daily_filtered[:,1], 98)
+u = data.quantile(0.98)
 
 # exceedences above the threshold
-j = np.where(daily_filtered[:,1] > u)[0]
-excess = daily_filtered[daily_filtered[:,1] > u,:] # values above the threshold
+#j = np.where(daily_filtered[:,1] > u)[0]
 
-exceedance = excess[:,1] - u # exceedance used in stationary GPD
-lambda_ = len(exceedance) / len(yrs) # mean #exceedances/yr
+#excess = daily_filtered[daily_filtered[:,1] > u,:] # values above the threshold
+excess = data[data['hourly_height_STND_meters'] > u[0]]
+
+# TODO: Convert this to working Python
+#exceedance = excess[:,1] - u # exceedance used in stationary GPD
+#lambda_ = len(exceedance) / len(yrs) # mean #exceedances/yr
 
 
 ###############################################################
@@ -101,22 +107,27 @@ lambda_ = len(exceedance) / len(yrs) # mean #exceedances/yr
 fig, ax = plt.subplots()
 
 # plot dailyMax
-ax.plot(dailyMax[:,0], dailyMax[:,1], '*-', label='Daily Max')
+dailyMax.rename(columns = {'hourly_height_STND_meters':'Daily Max'}, inplace=True)
+dailyMax.plot(ax=ax, title='Daily Max')
+#ax.plot(dailyMax, '*-', label='Daily Max')
 
 # plot daily_filtered
-ax.plot(daily_filtered[:,0], daily_filtered[:,1], '*', label='Filtered Data')
+data.plot(ax=ax, title='Filtered Data')
+#ax.plot(data, '*', label='Filtered Data')
 
 # plot excess
-ax.plot(excess[:,0], excess[:,1], 'o', label='Filtered Data above threshold')
+excess.plot(ax=ax, title='Filtered Data above threshold')
+#ax.plot(excess, 'o', label='Filtered Data above threshold')
 
 # plot 98th percentile threshold
-v = ax.axis()
-ax.plot([v[0], v[1]], [u, u], 'k-', linewidth=1.5)
+ax.axhline(u[0], linewidth=1.5)
+#v = ax.axis()
+#ax.plot([v[0], v[1]], [u, u], 'k-', linewidth=1.5)
 
 # add legend, ylabel, and datetick
 ax.legend()
 ax.set_ylabel('Sea Level (m)')
-ax.set_title('Title of Dataset')
+ax.set_title('Regional Frequency Analysis')
 plt.xticks(rotation=45)
 plt.subplots_adjust(bottom=0.2)
 plt.show()
